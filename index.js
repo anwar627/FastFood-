@@ -1,4 +1,97 @@
-require('dotenv').config();
+// backend/server.js — Node.js + Express + PostgreSQL (pg) Backend API
+// Create more route files in backend/routes/*.js using the "+ File" button!
+const express = require('express');
+const cors = require('cors');
+const { Pool } = require('pg');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/fastfood_db',
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
+
+// 1. Health Check Route
+app.get('/api/health', async (req, res) => {
+  const usersCount = await pool.query('SELECT * FROM users');
+  const ordersCount = await pool.query('SELECT * FROM orders');
+  res.status(200).json({
+    status: 'online',
+    engine: 'Node.js v20 + Express + PostgreSQL 16',
+    tables: {
+      users: usersCount.rowCount,
+      orders: ordersCount.rowCount,
+    },
+  });
+});
+
+// 2. Get All Registered Users from PostgreSQL
+app.get('/api/users', async (req, res) => {
+  const result = await pool.query('SELECT * FROM users ORDER BY id DESC');
+  res.status(200).json({
+    ok: true,
+    count: result.rowCount,
+    users: result.rows,
+  });
+});
+
+// 3. Register / Sign-In User from Flutter -> PostgreSQL
+app.post('/api/auth/register', async (req, res) => {
+  const { country, dial_code, phone, email } = req.body || {};
+  const cleanPhone = String(phone || '911234567').trim();
+  const cleanEmail = String(email || 'user@fastfood.et').trim();
+  const cleanCountry = String(country || 'Ethiopia').trim();
+  const cleanDial = String(dial_code || '+251').trim();
+
+  const insertResult = await pool.query(
+    'INSERT INTO users (country, dial_code, phone, email) VALUES ($1, $2, $3, $4) RETURNING *',
+    [cleanCountry, cleanDial, cleanPhone, cleanEmail]
+  );
+
+  res.status(201).json({
+    ok: true,
+    message: 'User saved to PostgreSQL!',
+    user:insertResult.rows[0],
+  });
+});
+
+// 4. Get Fast Food Menu Items from PostgreSQL
+app.get('/api/menu', async (req, res) => {
+  const result = await pool.query('SELECT * FROM menu_items ORDER BY id ASC');
+  res.status(200).json({
+    ok: true,
+    menu: result.rows,
+  });
+});
+
+// 5. Get Orders & Create New Fast Food Order in PostgreSQL
+app.get('/api/orders', async (req, res) => {
+  const result = await pool.query('SELECT * FROM orders ORDER BY id DESC');
+  res.status(200).json({
+    ok: true,
+    orders: result.rows,
+  });
+});
+
+app.post('/api/orders', async (req, res) => {
+  const { customer_email, item_name, total_etb, status } = req.body || {};
+  const insertOrder = await pool.query(
+    'INSERT INTO orders (customer_email, item_name, total_etb, status) VALUES ($1, $2, $3, $4) RETURNING *',
+    [customer_email || 'abebe@fastfood.et', item_name || 'Double Cheese Burger', total_etb || 450, status || 'Preparing']
+  );
+  res.status(201).json({
+    ok: true,
+    order: insertOrder.rows[0],
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log('🚀 Node.js + PostgreSQL API listening on port ' + PORT);
+});
+('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
